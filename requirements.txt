@@ -4,6 +4,6 @@ numpy
 matplotlib
 seaborn
 Pillow
-tensorflow==2.10.0
+tensorflow==2.19.0 # UPDATED to a Python 3.13 compatible version
 scikit-learn
 python-docx
