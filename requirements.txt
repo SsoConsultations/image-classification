@@ -4,6 +4,7 @@ numpy
 matplotlib
 seaborn
 Pillow
-tensorflow-cpu==2.10.0 # Reverted and added -cpu for explicit CPU version
+tensorflow-cpu==2.10.0
 scikit-learn
 python-docx
+protobuf==3.19.6
