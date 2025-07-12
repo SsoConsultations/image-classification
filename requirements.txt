@@ -4,6 +4,6 @@ numpy
 matplotlib
 seaborn
 Pillow
-tensorflow==2.19.0 # UPDATED to a Python 3.13 compatible version
+tensorflow-cpu==2.10.0 # Reverted and added -cpu for explicit CPU version
 scikit-learn
 python-docx
