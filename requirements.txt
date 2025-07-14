@@ -1,10 +1,10 @@
-streamlit>=1.27.0 # Ensure this line is present
+streamlit # Keep as is, or remove version pin if you had one
 pandas
-numpy==1.23.5
+numpy==1.23.5 # Keep this line as is
 matplotlib
 seaborn
 Pillow
 scikit-learn
 python-docx
-tensorflow-cpu==2.10.0
-protobuf
+tensorflow-cpu==2.11.0 # CHANGE THIS LINE to 2.11.0
+protobuf # You can keep this line, or even remove it and let pip resolve it, but it shouldn't hurt.
