@@ -1,10 +1,10 @@
 streamlit
 pandas
-numpy
+numpy==1.23.5 # Add or update this line
 matplotlib
 seaborn
 Pillow
-tensorflow-cpu==2.10.0
 scikit-learn
 python-docx
-protobuf==3.19.6
+tensorflow-cpu==2.10.0 # Ensure this is correct
+protobuf
