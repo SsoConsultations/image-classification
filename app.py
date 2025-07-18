@@ -47,6 +47,7 @@ def load_model_and_class_names():
             st.success("Pre-trained model and class names loaded successfully!")
         except Exception as e:
             st.error(f"Error loading model or class names: {e}")
+            st.exception(e) # Display the full exception for debugging
     return model, class_names
 
 def preprocess_image_for_prediction(image_bytes):
@@ -87,7 +88,7 @@ if page == "Train New Model":
     if st.button("Clear All Uploaded Training Data", key="clear_training_data"):
         st.session_state.training_data_collected = {}
         st.session_state.current_class_num = 1
-        st.success("All uploaded training data cleared.")
+        st.success("All uploaded training data cleared. Please start uploading your first class.")
         st.experimental_rerun() # Rerun to clear the display
 
     # Dynamic Class Data & Labels - Modified for guided flow
@@ -128,14 +129,20 @@ if page == "Train New Model":
                 st.session_state.current_class_num += 1
 
                 # Clear the input box and uploader for the next class
-                st.info(f"You have defined {len(st.session_state.training_data_collected)} classes. If you have another dataset, please define a new class above. Otherwise, you can proceed to train the model.")
+                if len(st.session_state.training_data_collected) >= 2:
+                    st.info(f"You have defined {len(st.session_state.training_data_collected)} classes. If you have another dataset, please define a new class above. Otherwise, you can click 'Start Training' below.")
+                else:
+                     st.info(f"Please upload at least one more dataset to have a minimum of two classes for training.")
                 st.experimental_rerun() # Rerun to show updated counts and new input prompt
     elif st.session_state.current_class_num > 1: # Only if at least one class has been processed
-         st.info(f"You have defined {len(st.session_state.training_data_collected)} classes. If you have another dataset, please define a new class above. Otherwise, you can proceed to train the model.")
+         if len(st.session_state.training_data_collected) >= 2:
+             st.info(f"You have defined {len(st.session_state.training_data_collected)} classes. If you have another dataset, please define a new class above. Otherwise, you can click 'Start Training' below.")
+         else:
+              st.info(f"You have defined {len(st.session_state.training_data_collected)} class. Please upload at least one more dataset to have a minimum of two classes for training.")
 
 
     if len(st.session_state.training_data_collected) < 2:
-        st.warning("Please define and upload images for at least two classes to proceed with training.")
+        st.warning("You need to define and upload images for at least two classes to proceed with training.")
 
     # Training Button
     if st.button("Start Training", disabled=(len(st.session_state.training_data_collected) < 2), key="start_training_btn"):
@@ -164,6 +171,8 @@ if page == "Train New Model":
                         all_labels.append(label)
                     except Exception as e:
                         st.warning(f"Could not load an image for label '{label}': {e}")
+                        # Display specific error for the image
+                        st.exception(e)
                         continue
                     images_loaded_count += 1
                     image_load_bar.progress(images_loaded_count / total_images_to_load, text=f"{progress_text} ({images_loaded_count}/{total_images_to_load})")
@@ -227,16 +236,16 @@ if page == "Train New Model":
             # Model Training
             early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
-            with st.status("Training in progress...", expanded=True) as status:
-                st.write("Fitting the model...")
+            # --- CHANGE APPLIED HERE: Using st.spinner and verbose=1 ---
+            with st.spinner("Training the model... This might take some time, please check the Streamlit logs for live epoch updates."):
                 history = model.fit(
                     train_generator,
                     epochs=100,
                     validation_data=validation_generator,
                     callbacks=[early_stopping],
-                    verbose=0 # Suppress verbose output to console, Streamlit status will show progress
+                    verbose=1 # Changed to verbose=1 to allow Keras to print to stdout/logs
                 )
-                status.update(label="Training complete!", state="complete", expanded=False)
+            # --- END OF CHANGE ---
 
             st.session_state.model = model # Store the trained model in session state
 
@@ -257,6 +266,7 @@ if page == "Train New Model":
                 st.success(f"Class names saved to '{CLASS_NAMES_PATH}'")
             except Exception as e:
                 st.error(f"Error saving model or class names: {e}")
+                st.exception(e)
 
             st.balloons() # Visual celebration
             st.success("🥳 Training completed successfully! Your custom model is ready.")
@@ -315,3 +325,4 @@ elif page == "Predict with Model":
                 except Exception as e:
                     st.error(f"Error classifying image: {e}")
                     st.error("Please ensure the uploaded file is a valid image.")
+                    st.exception(e) # Display the full exception for debugging
