@@ -49,8 +49,8 @@ def load_model_and_class_names():
             st.error(f"Error loading model or class names: {e}")
     return model, class_names
 
-def preprocess_image(image_bytes):
-    """Loads, resizes, and pre-processes an image for MobileNetV2."""
+def preprocess_image_for_prediction(image_bytes):
+    """Loads, resizes, and pre-processes an image for MobileNetV2 prediction."""
     img = Image.open(io.BytesIO(image_bytes)).resize(IMAGE_SIZE)
     img_array = np.array(img)
     if img_array.ndim == 2:  # Grayscale
@@ -72,6 +72,9 @@ if 'model' not in st.session_state:
 if 'training_data_collected' not in st.session_state:
     st.session_state.training_data_collected = {} # Stores {'label': [list_of_image_bytes]}
 
+if 'current_class_num' not in st.session_state:
+    st.session_state.current_class_num = 1 # Tracks which class the user is currently uploading
+
 # Sidebar for navigation
 st.sidebar.header("Navigation")
 page = st.sidebar.radio("Go to", ["Train New Model", "Predict with Model"])
@@ -81,11 +84,13 @@ if page == "Train New Model":
     st.info("Upload images for each class. You need at least two classes.")
     st.warning("Training can take some time depending on your dataset size and hardware.")
 
-    if st.button("Clear All Uploaded Training Data"):
+    if st.button("Clear All Uploaded Training Data", key="clear_training_data"):
         st.session_state.training_data_collected = {}
+        st.session_state.current_class_num = 1
+        st.success("All uploaded training data cleared.")
         st.experimental_rerun() # Rerun to clear the display
 
-    # Dynamic Class Data & Labels
+    # Dynamic Class Data & Labels - Modified for guided flow
     st.subheader("1. Define Classes & Upload Images")
 
     # Display current collected classes and allow new ones
@@ -95,38 +100,55 @@ if page == "Train New Model":
             st.write(f"- **{label}**: {len(images)} images")
         st.markdown("---")
 
-    new_class_label = st.text_input("Enter a new class label (e.g., 'cats', 'dogs', 'bike'):").strip()
+    # Prompt for current class upload
+    current_class_prompt = f"Please enter the label for Class {st.session_state.current_class_num} (e.g., 'cats', 'dogs', 'other'):"
+    new_class_label = st.text_input(current_class_prompt, key=f"label_input_{st.session_state.current_class_num}").strip()
 
     if new_class_label:
-        uploaded_files = st.file_uploader(
-            f"Upload images for '{new_class_label}'",
-            type=["png", "jpg", "jpeg", "gif", "bmp"],
-            accept_multiple_files=True,
-            key=f"uploader_{new_class_label}" # Unique key for each uploader
-        )
+        if new_class_label in st.session_state.training_data_collected:
+            st.warning(f"Label '{new_class_label}' already used. Please enter a unique label for Class {st.session_state.current_class_num}.")
+        else:
+            st.write(f"Now, please upload all images for '{new_class_label}'.")
+            st.info("You can select multiple files at once in the file dialog.")
+            uploaded_files = st.file_uploader(
+                f"Upload images for '{new_class_label}'",
+                type=["png", "jpg", "jpeg", "gif", "bmp"],
+                accept_multiple_files=True,
+                key=f"uploader_{st.session_state.current_class_num}" # Unique key for each uploader
+            )
 
-        if uploaded_files:
-            if new_class_label not in st.session_state.training_data_collected:
+            if uploaded_files:
                 st.session_state.training_data_collected[new_class_label] = []
+                for uploaded_file in uploaded_files:
+                    image_bytes = uploaded_file.read()
+                    st.session_state.training_data_collected[new_class_label].append(image_bytes)
+                st.success(f"Successfully uploaded {len(uploaded_files)} images for '{new_class_label}'.")
 
-            for uploaded_file in uploaded_files:
-                # Read image as bytes
-                image_bytes = uploaded_file.read()
-                st.session_state.training_data_collected[new_class_label].append(image_bytes)
-                st.write(f"Added: {uploaded_file.name}")
-            st.success(f"Successfully added {len(uploaded_files)} images for '{new_class_label}'.")
-            # Clear the input box after upload
-            st.experimental_rerun() # Rerun to show updated counts and clear input
+                # Increment class number for the next upload
+                st.session_state.current_class_num += 1
+
+                # Clear the input box and uploader for the next class
+                st.info(f"You have defined {len(st.session_state.training_data_collected)} classes. If you have another dataset, please define a new class above. Otherwise, you can proceed to train the model.")
+                st.experimental_rerun() # Rerun to show updated counts and new input prompt
+    elif st.session_state.current_class_num > 1: # Only if at least one class has been processed
+         st.info(f"You have defined {len(st.session_state.training_data_collected)} classes. If you have another dataset, please define a new class above. Otherwise, you can proceed to train the model.")
+
 
     if len(st.session_state.training_data_collected) < 2:
         st.warning("Please define and upload images for at least two classes to proceed with training.")
 
     # Training Button
-    if st.button("Start Training", disabled=(len(st.session_state.training_data_collected) < 2)):
+    if st.button("Start Training", disabled=(len(st.session_state.training_data_collected) < 2), key="start_training_btn"):
         st.subheader("2. Preparing Data and Training Model")
         with st.spinner("Preparing data and training model... This may take a while."):
             all_images = []
             all_labels = []
+
+            # Progress bar for image loading
+            total_images_to_load = sum(len(v) for v in st.session_state.training_data_collected.values())
+            progress_text = "Image processing in progress. Please wait."
+            image_load_bar = st.progress(0, text=progress_text)
+            images_loaded_count = 0
 
             # Flatten collected data
             for label, image_bytes_list in st.session_state.training_data_collected.items():
@@ -143,6 +165,9 @@ if page == "Train New Model":
                     except Exception as e:
                         st.warning(f"Could not load an image for label '{label}': {e}")
                         continue
+                    images_loaded_count += 1
+                    image_load_bar.progress(images_loaded_count / total_images_to_load, text=f"{progress_text} ({images_loaded_count}/{total_images_to_load})")
+            image_load_bar.empty() # Clear the progress bar after completion
 
             if not all_images:
                 st.error("No valid images were loaded for training. Please check your uploads.")
@@ -192,11 +217,12 @@ if page == "Train New Model":
             model.compile(optimizer=Adam(learning_rate=1e-5), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
             st.subheader("Model Summary")
-            # model.summary() # This prints to console, we might want to capture and display
-            # A simple way to show summary:
-            # model_summary_string = []
-            # model.summary(print_fn=lambda x: model_summary_string.append(x))
-            # st.text("\n".join(model_summary_string))
+            # You can capture and display the model summary like this if desired:
+            # import io
+            # from contextlib import redirect_stdout
+            # with io.StringIO() as s, redirect_stdout(s):
+            #     model.summary()
+            # st.text(s.getvalue())
 
             # Model Training
             early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
@@ -220,13 +246,6 @@ if page == "Train New Model":
             st.success(f"Validation Loss: {loss:.4f}")
             st.success(f"Validation Accuracy: {accuracy*100:.2f}%")
 
-            # Classification report (optional for Streamlit, can be heavy for large data)
-            # You might want to skip this for a simple UI or provide an option to view it
-            # y_pred = model.predict(validation_generator)
-            # y_pred_classes = np.argmax(y_pred, axis=1)
-            # st.subheader("Classification Report")
-            # st.text(classification_report(y_val, y_pred_classes, target_names=st.session_state.class_names))
-
             # Save the Model and Class Names
             st.subheader("4. Saving Model")
             try:
@@ -239,7 +258,9 @@ if page == "Train New Model":
             except Exception as e:
                 st.error(f"Error saving model or class names: {e}")
 
-            st.info("Training complete. You can now go to 'Predict with Model' to test it.")
+            st.balloons() # Visual celebration
+            st.success("🥳 Training completed successfully! Your custom model is ready.")
+            st.info("You have successfully completed training. You can now switch to the 'Predict with Model' section in the sidebar to test it with new images.")
 
 elif page == "Predict with Model":
     st.header("🔮 Predict Image Class")
@@ -250,7 +271,8 @@ elif page == "Predict with Model":
         st.write("Upload an image to get a prediction from your trained model.")
         uploaded_predict_file = st.file_uploader(
             "Upload an image for classification",
-            type=["png", "jpg", "jpeg", "gif", "bmp"]
+            type=["png", "jpg", "jpeg", "gif", "bmp"],
+            key="predict_file_uploader"
         )
 
         if uploaded_predict_file is not None:
@@ -259,7 +281,7 @@ elif page == "Predict with Model":
             with st.spinner("Classifying image..."):
                 try:
                     image_bytes = uploaded_predict_file.read()
-                    preprocessed_img = preprocess_image(image_bytes)
+                    preprocessed_img = preprocess_image_for_prediction(image_bytes)
 
                     predictions = st.session_state.model.predict(preprocessed_img)
                     predicted_class_index = np.argmax(predictions, axis=1)[0]
@@ -268,19 +290,20 @@ elif page == "Predict with Model":
 
                     st.subheader("Prediction Results:")
 
-                    confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.9, 0.05) # Slider for threshold
+                    confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.9, 0.05, key="confidence_slider") # Slider for threshold
 
                     # Check for uncertainty or low confidence
                     if len(st.session_state.class_names) > 1 and (sorted_probs[0] - sorted_probs[1]) < 0.2:
                         st.warning("The model is somewhat uncertain about this image (top two probabilities are close).")
                         st.write(f"**Highest predicted class:** '{st.session_state.class_names[predicted_class_index]}' with **{predicted_probability*100:.2f}%** confidence.")
-                        st.write(f"Second highest: '{st.session_state.class_names[np.argsort(predictions[0])[-2]]}' with {sorted_probs[1]*100:.2f}% confidence.")
+                        if len(st.session_state.class_names) > 1:
+                            st.write(f"Second highest: '{st.session_state.class_names[np.argsort(predictions[0])[-2]]}' with {sorted_probs[1]*100:.2f}% confidence.")
                         st.info("This image might not clearly belong to any trained class, or it could be an 'other' type.")
                     elif predicted_probability >= confidence_threshold:
                         predicted_label = st.session_state.class_names[predicted_class_index]
                         st.success(f"The model confidently predicts this image is a **'{predicted_label}'** with **{predicted_probability*100:.2f}%** confidence.")
                     else:
-                        st.info("The model cannot confidently classify this image (confidence below threshold).")
+                        st.info("The model cannot confidently classify this image.")
                         st.write(f"Highest predicted class: '{st.session_state.class_names[predicted_class_index]}' with {predicted_probability*100:.2f}% confidence (below {confidence_threshold*100:.0f}% threshold).")
                         st.write("This image may not belong to any trained class, or the model needs more diverse training data.")
 
