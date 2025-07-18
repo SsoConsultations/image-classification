@@ -1,10 +1,10 @@
 streamlit>=1.25.0
-numpy
+numpy==1.23.5  # <--- CRUCIAL CHANGE: Pinning numpy to a compatible version
 Pillow
-tensorflow
+tensorflow==2.11.0 # <--- Also good to explicitly pin TensorFlow
 scikit-learn
 scipy
 h5py
-keras
+keras==2.11.0 # <--- Pin Keras to match TensorFlow
 matplotlib
 requests
