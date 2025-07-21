@@ -197,15 +197,24 @@ if page == "Train New Model":
             st.write(f"Training images: {len(X_train)}")
             st.write(f"Validation images: {len(X_val)}")
 
+            # --- MODIFIED: Simplified ImageDataGenerator parameters ---
             train_datagen = ImageDataGenerator(
                 preprocessing_function=tf.keras.applications.mobilenet_v2.preprocess_input,
-                rotation_range=40, width_shift_range=0.3, height_shift_range=0.3,
-                shear_range=0.3, zoom_range=0.3, horizontal_flip=True, vertical_flip=True,
-                brightness_range=[0.6, 1.4], fill_mode='nearest'
+                horizontal_flip=True, # Keep common, safe augmentation
+                # Removed or simplified other aggressive augmentations for troubleshooting
+                # rotation_range=0,
+                # width_shift_range=0,
+                # height_shift_range=0,
+                # shear_range=0,
+                # zoom_range=0,
+                # vertical_flip=False,
+                # brightness_range=None,
+                # fill_mode='nearest' # Only relevant if shifts are used
             )
             val_datagen = ImageDataGenerator(
                 preprocessing_function=tf.keras.applications.mobilenet_v2.preprocess_input
             )
+            # --- END MODIFIED ---
 
             train_generator = train_datagen.flow(X_train, y_train, batch_size=32)
             validation_generator = val_datagen.flow(X_val, y_val, batch_size=32)
